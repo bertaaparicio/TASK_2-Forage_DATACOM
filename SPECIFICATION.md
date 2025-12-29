@@ -1,105 +1,175 @@
-# Kudos System Specification
+# SPECIFICATION.md — AI Collaboration Example
 
-## Overview
-Build a “Kudos” feature for the internal employee portal:
-- Employees can send kudos (short appreciation messages) to colleagues.
-- A public dashboard feed shows recent kudos.
-- Admins can moderate inappropriate content (hide or delete).
+## Task 2: Spec-Driven Feature Development (Kudos System)
+
+**Role:** Graduate Developer / AI Architect  
+**Context:** Internal employee portal  
+**Objective:** Transform an ambiguous feature request into a complete, implementation-ready specification using a spec-driven development approach.
 
 ---
 
-## Functional Requirements
+## Step 1: AI-Generated Interpretation (Summary)
+
+- Users can send short appreciation messages to colleagues.
+- A public feed displays recent kudos.
+- Basic CRUD functionality for kudos messages.
+- Assumes authenticated users and an existing employee list.
+
+### Architect Notes
+
+The initial request was intentionally vague. While it described the *happy path*, it did not consider:
+- Content moderation
+- Abuse prevention
+- Visibility control
+- Administrative responsibilities
+
+These gaps must be addressed at the specification stage before implementation.
+
+---
+
+## Step 2: Refining the Requirements
+
+### Added Functional Requirement — Content Moderation
+
+#### New User Story (Admin)
+
+- As an **administrator**, I can hide inappropriate kudos so they are no longer visible in the public feed.
+- As an **administrator**, I can permanently delete inappropriate kudos messages.
+
+#### Rationale
+
+Without moderation capabilities, the system could expose the organization to reputational and HR risks. Moderation is therefore a non-optional requirement for a production-ready internal feature.
+
+---
+
+## Step 3: Final Functional Requirements
 
 ### Roles
-- **User**: authenticated employee who can send and view kudos.
-- **Admin**: authenticated user with moderation privileges.
+
+- **User**
+  - Authenticated employee
+  - Can send and view kudos
+
+- **Admin**
+  - Authenticated employee with moderation privileges
+  - Can hide or delete kudos messages
+
+---
 
 ### User Stories
+
 1. **Send Kudos**
-   - As a user, I can select a colleague from a list and write a short message of appreciation to send kudos.
-2. **View Feed**
-   - As a user, I can view a public feed on the main dashboard that shows recently submitted kudos.
+   - As a user, I can select a colleague and send a short appreciation message.
+
+2. **View Public Feed**
+   - As a user, I can see a public feed of recently submitted kudos.
+
 3. **Input Validation**
-   - As a user, I receive clear validation errors if I exceed the message length, omit required fields, or attempt to submit empty content.
-4. **Moderate Content (NEW)**
-   - As an admin, I can **hide** inappropriate kudos from the public feed.
-   - As an admin, I can **delete** inappropriate kudos messages permanently.
+   - As a user, I receive clear feedback if my message is empty, too long, or invalid.
+
+4. **Moderate Content (Admin)**
+   - As an admin, I can hide kudos from the public feed.
+   - As an admin, I can delete kudos permanently.
+
+---
 
 ### Acceptance Criteria
 
-#### 1) Send Kudos
-- User must be logged in.
-- User can select a recipient from a list of users (excluding self).
-- Message is required, trimmed, and must be **1–500 characters**.
+#### Sending Kudos
+- User must be authenticated.
+- Recipient cannot be the sender.
+- Message must be trimmed and between **1–500 characters**.
 - On success:
-  - Kudos is stored in DB.
+  - Kudos is stored in the database.
   - Kudos appears in the public feed (if visible).
-  - User sees confirmation.
 
-#### 2) View Feed
-- Dashboard shows recent kudos sorted by newest first.
-- Feed shows: sender name, recipient name, message, timestamp.
-- Feed shows only kudos where `is_visible = true`.
-- Pagination or “load more” supported (e.g., 20 at a time).
+#### Public Feed
+- Sorted by newest first.
+- Displays sender, recipient, message, and timestamp.
+- Shows only kudos where `is_visible = true`.
+- Paginated to avoid loading all data at once.
 
-#### 3) Validation & Safety
-- Reject empty/whitespace-only messages.
-- Basic server-side sanitization/escaping to prevent XSS in rendered messages.
-- Rate limiting (lightweight): e.g., max 10 kudos per user per hour (optional but recommended).
+#### Safety & Abuse Prevention
+- Reject empty or whitespace-only messages.
+- Server-side escaping to prevent XSS.
+- Rate limit: maximum **10 kudos per user per hour**.
 
-#### 4) Admin Moderation (NEW)
-- Admin can hide a kudos:
-  - Hidden kudos no longer appears in the public feed.
-  - Hidden kudos remains in DB for audit/traceability.
-- Admin can delete a kudos:
-  - Deleted kudos is removed from DB (or soft-delete if preferred).
-- Admin actions are logged (who, when, what action).
+#### Admin Moderation
+- Admin can hide or unhide kudos (soft moderation).
+- Admin can delete kudos (hard delete).
+- Moderation actions record:
+  - Who moderated the message
+  - When the action occurred
+  - Optional moderation reason
 
 ---
 
-## Technical Design
+## Step 4: Technical Design
 
-### Assumptions / Constraints
-- Existing app already has user authentication.
-- We have a Users table (or identity provider) with unique user IDs.
-- Internal web app stack can be implemented as:
-  - Backend API (e.g., Python Flask/FastAPI or Node)
-  - Frontend (e.g., React) or server-rendered templates
-  - SQL database (e.g., PostgreSQL/SQLite for demo)
+### Technology Choice
 
-### Data Model
+To maximize speed of delivery and clarity for a prototype:
+- **Streamlit** for UI and interaction
+- **SQLite** for persistence
+- **Python** for all application logic
 
-#### Table: `kudos`
+This approach minimizes boilerplate while clearly demonstrating feature behavior.
+
+---
+
+### Database Schema
+
+#### Table: `users`
+
 | Field | Type | Notes |
 |------|------|------|
-| id | UUID / INTEGER | Primary key |
-| sender_user_id | VARCHAR / UUID | FK to users |
-| recipient_user_id | VARCHAR / UUID | FK to users |
-| message | TEXT | 1–500 chars (enforced in API/DB constraints where possible) |
-| created_at | TIMESTAMP | default now |
-| is_visible | BOOLEAN | **default true** (NEW requirement) |
-| moderated_by | VARCHAR / UUID | nullable FK to users (admin) |
-| moderated_at | TIMESTAMP | nullable |
-| moderation_reason | TEXT | nullable (optional) |
+| id | TEXT | Primary key |
+| display_name | TEXT | Employee name |
+| is_admin | INTEGER | 0 / 1 |
 
-**Indexes**
-- `created_at` for feed sorting
-- `(is_visible, created_at)` composite index for feed filtering
-- `recipient_user_id` index (optional, for future “my kudos” views)
+#### Table: `kudos`
 
-### API Design
+| Field | Type | Notes |
+|------|------|------|
+| id | INTEGER | Primary key |
+| sender_user_id | TEXT | FK → users.id |
+| recipient_user_id | TEXT | FK → users.id |
+| message | TEXT | 1–500 characters |
+| created_at | TEXT | ISO timestamp |
+| is_visible | INTEGER | Default **true** |
+| moderated_by | TEXT | Nullable FK → users.id |
+| moderated_at | TEXT | Nullable |
+| moderation_reason | TEXT | Nullable |
 
-#### Auth
-All endpoints require authentication. Admin endpoints require admin role.
+**Design Decision:**  
+The `is_visible` flag enables soft moderation without data loss, supporting traceability and auditability.
 
-#### Endpoints
+---
 
-1) **Get user list (for recipient selection)**
-- `GET /api/users`
-- Response: list of `{ user_id, display_name }`
+## Step 5: Implementation Plan
 
-2) **Create kudos**
-- `POST /api/kudos`
-- Body:
-  ```json
-  { "recipient_user_id": "U123", "message": "Great job on the release!" }
+1. Initialize database schema and seed demo users.
+2. Implement Streamlit UI:
+   - Demo login
+   - Kudos submission form
+   - Public feed
+3. Add validation and rate limiting.
+4. Implement admin moderation interface.
+5. Add basic unit tests for database logic.
+6. Final review and cleanup.
+
+---
+
+## Reflection on Spec-Driven Development
+
+This task demonstrates that the highest-impact work occurs **before code is written**.  
+By refining ambiguous requirements into explicit user stories, acceptance criteria, and data models, the subsequent AI-driven implementation becomes predictable and reliable.
+
+The developer’s role shifts from writing code to:
+- defining constraints
+- anticipating risks
+- validating assumptions
+- approving a correct blueprint
+
+This ensures that AI acts as a force multiplier rather than a source of technical debt.
+
